@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import com.lynden.gmapsfx.GoogleMapView?>
+<?import javafx.scene.control.Tab?>
+<?import javafx.scene.control.TabPane?>
+<?import javafx.scene.layout.AnchorPane?>
+<?import javafx.scene.layout.ColumnConstraints?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.RowConstraints?>
+
+<TabPane prefHeight="617.0" prefWidth="1064.0" tabClosingPolicy="ALL_TABS" xmlns="http://javafx.com/javafx/8.0.172-ea" xmlns:fx="http://javafx.com/fxml/1" fx:controller="sample.Controller">
+   <tabs>
+      <Tab closable="false" text="Map">
+         <content>
+            <GridPane alignment="center" hgap="10" prefHeight="580.0" prefWidth="820.0" vgap="10">
+                <children>
+                    <GoogleMapView fx:id="mapView" prefHeight="588.0" prefWidth="1068.0" AnchorPane.bottomAnchor="0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0" AnchorPane.topAnchor="0.0" />
+                </children>
+               <columnConstraints>
+                  <ColumnConstraints />
+               </columnConstraints>
+               <rowConstraints>
+                  <RowConstraints />
+               </rowConstraints>
+            </GridPane>
+         </content>
+      </Tab>
+   </tabs>
+</TabPane>
