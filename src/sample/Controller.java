@@ -1,5 +1,9 @@
 package sample;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.lynden.gmapsfx.GoogleMapView;
 import com.lynden.gmapsfx.MapComponentInitializedListener;
 import com.lynden.gmapsfx.javascript.object.*;
@@ -8,10 +12,15 @@ import com.lynden.gmapsfx.service.geocoding.GeocodingResult;
 import com.lynden.gmapsfx.javascript.object.Marker;
 import com.lynden.gmapsfx.javascript.object.MarkerOptions;
 import com.lynden.gmapsfx.service.geocoding.GeocodingService;
-import java.net.URL;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.*;
 import java.sql.*;
 import java.sql.DriverManager;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.ResourceBundle;
 import java.util.concurrent.ThreadLocalRandom;
 import com.lynden.gmapsfx.shapes.Polygon;
@@ -29,6 +38,10 @@ import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.TextFieldListCell;
+import jdk.nashorn.internal.parser.JSONParser;
+
+import javax.print.DocFlavor;
+import java.net.URL;
 
 public class Controller implements Initializable, MapComponentInitializedListener {
 
@@ -50,38 +63,53 @@ public class Controller implements Initializable, MapComponentInitializedListene
 
     private StringProperty address = new SimpleStringProperty();
 
-    Marker[] marker = new Marker[5];
-    LatLong[] positions = new LatLong[5];
-    double[] lat = new double[5];
-    double[] lon = new double[5];
+    Marker[] marker;
+    LatLong[] positions;
     private ArrayList<Polyline> sensorPolylineArray = new ArrayList<>();
-    InfoWindow window;
 
-    //Ship and trip details
-    public String shipname, startPort, endPort, time;
-    public double[] pLat = new double[100];
-    public double[] pLong = new double[100];
+    //Ship information
+    String newline = System.getProperty("line.separator");
+    public JsonElement tripID,shipName, startTime, port, finalPort, shipType, latHolder, lonHolder;
+    public JsonObject shipPath;
 
-    //Connects to the database, executes queries and saves results in variables
-    public void DatabaseConnector(String myID){
-        try{
-            Class.forName("com.mysql.jdbc.Driver");
-            Connection con = DriverManager.getConnection("url", "user", "password");
-            Statement stmt = con.createStatement();
-            int intID = Integer.parseInt(myID);
-            ResultSet rs = stmt.executeQuery("select * from mytable where id ='"+ intID +"'");
-                while(rs.next()) {
-                    shipname = rs.getString(1);
-                    startPort = rs.getString(2);
-                    endPort = rs.getString(3);
-                    time = rs.getString(4);
+    public Double[] latPos = new Double[10000];
+    public Double[] lonPos = new Double[10000];
 
-                    //More queries
-                }
-            con.close();
-        }catch(Exception e) {
-            System.out.println(e);
+    //Connects to the API
+    public void APIReader(String apiID) throws IOException {
+
+        String sURL = "https://api.mzabel.eu/felixstowe-rotterdam/" + apiID;
+        URL url = new URL(sURL);
+        HttpURLConnection request =  (HttpURLConnection) url.openConnection();
+        request.connect();
+
+        JsonParser jp = new JsonParser();
+        JsonElement root = jp.parse(new InputStreamReader((InputStream) request.getContent()));
+        JsonObject obj = root.getAsJsonObject();
+
+        shipName = obj.getAsJsonObject("data").get("Name");
+        tripID = obj.getAsJsonObject("data").get("TripID");
+        startTime = obj.getAsJsonObject("data").get("StartTime");
+        port = obj.getAsJsonObject("data").get("StartPort");
+        finalPort = obj.getAsJsonObject("data").get("EndPort");
+        shipType = obj.getAsJsonObject("data").get("shiptype");
+
+        shipPath = obj.getAsJsonObject("data").getAsJsonObject("path");
+
+        for (int i = 1; i < shipPath.size(); i++) {
+            String number = Integer.toString(i);
+            latHolder = shipPath.getAsJsonObject(number).get("lat");
+            lonHolder = shipPath.getAsJsonObject(number).get("lon");
+            String latiHolder = latHolder.toString();
+            String longHolder = lonHolder.toString();
+            latPos[i - 1] = Double.parseDouble(latiHolder);
+            lonPos[i - 1] = Double.parseDouble(longHolder);
+            //System.out.println(latPos[i]);
+           // System.out.println(lonPos[i]);
         }
+
+
+
     }
 
     @Override
@@ -89,8 +117,12 @@ public class Controller implements Initializable, MapComponentInitializedListene
         mapView.addMapInializedListener(this);
         //address.bind(addressTextField.textProperty());
 
+        List<String> counter = new ArrayList<>();
         //Creates and adds the items for the list view
-        ObservableList<String> items = FXCollections.observableArrayList ("Fahrt 1", "Fahrt 2", "Fahrt 3", "Fahrt 4", "Fahrt 5", "Fahrt 6", "Fahrt 7", "Fahrt 8", "Fahrt 9", "Fahrt 10");
+        for (int i = 0; i <= 1837; i++) {
+            counter.add("Fahrt " + i);
+        }
+        ObservableList<String> items = FXCollections.observableArrayList (counter);
         list.setItems(items);
         list.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
 
@@ -99,18 +131,27 @@ public class Controller implements Initializable, MapComponentInitializedListene
 
             //Deletes all markers from the map
             map.clearMarkers();
-
+            String result = newValue.toString().split("\\s+")[1];
             //Deletes the current path line displayed on the map
-            for (Polyline polyline : sensorPolylineArray) {
-                map.removeMapShape(polyline);
+           for (Polyline polyline : sensorPolylineArray) {
+               map.removeMapShape(polyline);
             }
 
-            //DatabaseConnector(newValue.toString());
+            try {
+                APIReader(result);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
             PointSetter();
             PointConnector();
 
             //Sets text on the detail window
-            info.setText(newValue.toString());
+            info.setText("Ship: " + shipName.toString() + newline);
+            info.appendText("Date: " + startTime.toString() + newline);
+            info.appendText("From: " + port.toString() + newline);
+            info.appendText("To: " + finalPort.toString() + newline);
+            info.appendText("Type: " + shipType.toString());
+
         });
     }
 
@@ -146,8 +187,13 @@ public class Controller implements Initializable, MapComponentInitializedListene
     //Draws a polyline on a path including all markers
     void PointConnector() {
 
-        for(int i = 0; i < positions.length; i++) {
-            positions[i] = new LatLong(lat[i], lon[i]);
+        positions = new LatLong[shipPath.size()];
+        for(int i = 0; i <  positions.length; i++) {
+            if (latPos[i] != null && lonPos[i] != null ) {
+                positions[i] = new LatLong(latPos[i], lonPos[i]);
+            } else {
+                positions[i] = new LatLong(latPos[i - 2], lonPos[i - 2]);
+            }
         }
 
         LatLong[] array = positions;
@@ -164,16 +210,23 @@ public class Controller implements Initializable, MapComponentInitializedListene
     //Sets markers on every position
     void PointSetter() {
 
+        marker = new Marker[shipPath.size()];
         MarkerOptions markerOptions = new MarkerOptions();
 
-        for(int i = 0; i < marker.length; i++) {
-            lat[i] = ThreadLocalRandom.current().nextDouble(52, 54);
-            lon[i] = ThreadLocalRandom.current().nextDouble(8, 10);
-            markerOptions.position( new LatLong(lat[i], lon[i]))
-                    .visible(Boolean.FALSE)
-                    .title("My Marker");
-            marker[i] = new Marker(markerOptions);
-            map.addMarker((marker[i]));
+        for(int i = 0; i < shipPath.size(); i++) {
+            //public Double[] latPos = new Double[1000];
+            //public Double[] lonPos = new Double[1000];
+           // lat[i] = ThreadLocalRandom.current().nextDouble(52, 54);
+            //lon[i] = ThreadLocalRandom.current().nextDouble(8, 10);
+            //lat[i] = latPos[i];
+            //lon[i] = lonPos[i];
+            if (latPos[i] != null && lonPos[i] != null ) {
+                markerOptions.position( new LatLong(latPos[i], lonPos[i]))
+                        .visible(Boolean.TRUE)
+                        .title("My Marker");
+                marker[i] = new Marker(markerOptions);
+                map.addMarker((marker[i]));
+            }
         }
     }
 
